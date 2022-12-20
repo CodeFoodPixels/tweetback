@@ -110,8 +110,8 @@ class Twitter {
 			return url
 		}
 		
-		if (!fs.existsSync("./video/")) {
-			fs.mkdirSync("./video/");
+		if (!fs.existsSync(outputDir))) {
+			fs.mkdirSync(outputDir);
 		}
 
 		if (!fs.existsSync(video)) {
