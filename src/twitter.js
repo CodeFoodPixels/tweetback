@@ -3,13 +3,15 @@ const { parseDomain } = require("parse-domain");
 const dataSource = require("./DataSource");
 const metadata = require("../_data/metadata.js");
 const eleventyImg = require("@11ty/eleventy-img");
+const path = require("path");
+const fs = require("fs");
+const fsp = fs.promises;
 
 const ELEVENTY_IMG_OPTIONS = {
 	widths: [null],
 	formats: ["jpeg"],
 	// If you don’t want to check this into your git repository (and want to fetch them in your build)
-	// outputDir: "./_site/img/",
-	outputDir: "./img/",
+	outputDir: "./_site/img/",
 	urlPath: "/img/",
 	cacheDuration: "*",
 	filenameFormat: function (id, src, width, format, options) {
@@ -98,6 +100,28 @@ class Twitter {
 		return this._isMentionCheck(tweet);
 	}
 
+	async copyVideo(video) {
+		const outputDir = "./_site/video/";
+		const urlPath = "/video/";
+		
+		const outputPath = `${outputDir}${path.basename(video)}`;
+		const url = `${urlPath}${path.basename(video)}`
+		if (fs.existsSync(outputPath)) {
+			return url
+		}
+		
+		if (!fs.existsSync("./video/")) {
+			fs.mkdirSync("./video/");
+		}
+
+		if (!fs.existsSync(video)) {
+			throw new Error(`Video "${video}" does not exist`)
+		}
+
+		await fsp.copyFile(video, outputPath);
+		return url;
+	}
+
 	// isAmbiguousReplyMention(tweet) {
 	// 	let days = 365;
 	// 	let comparisonDate = new Date(2012, 5, Date.now() - 1000*60*60*24*days);
@@ -177,13 +201,14 @@ class Twitter {
 		if( tweet.extended_entities ) {
 			for(let media of tweet.extended_entities.media ) {
 				if(media.type === "photo") {
+					let localImgPath = `./media/${tweet.id}-${path.basename(media.media_url_https)}`;
 					// remove photo URL
 					text = text.replace(media.url, "");
 
 					let imgHtml = "";
 					// TODO the await use here on eleventyImg could be improved
 					try {
-						let stats = await eleventyImg(media.media_url_https, ELEVENTY_IMG_OPTIONS);
+						let stats = await eleventyImg(localImgPath, ELEVENTY_IMG_OPTIONS);
 						let imgRef = stats.jpeg[0];
 						imgHtml = `<img src="${imgRef.url}" width="${imgRef.width}" height="${imgRef.height}" alt="${media.alt_text || "oh my god twitter doesn’t include alt text from images in their API"}" class="tweet-media u-featured" onerror="fallbackMedia(this)" loading="lazy" decoding="async">`;
 						medias.push(`<a href="${imgRef.url}">${imgHtml}</a>`);
@@ -195,12 +220,12 @@ class Twitter {
 					if(media.video_info && media.video_info.variants) {
 						text = text.replace(media.url, "");
 
-						let remoteVideoUrl = media.video_info.variants[0].url;
-
+						let remoteVideoUrl = new URL(media.video_info.variants.filter((vid) => !!vid.bitrate).sort((a, b) => parseInt(b.bitrate, 10)-parseInt(a.bitrate, 10))[0].url);
+						let localVideoPath = `./media/${tweet.id}-${path.basename(remoteVideoUrl.pathname)}`
+						
 						try {
-							let stats = await eleventyImg(media.media_url_https, ELEVENTY_IMG_OPTIONS);
-							let imgRef = stats.jpeg[0];
-							medias.push(`<video muted controls ${media.type === "animated_gif" ? "loop" : ""} src="${remoteVideoUrl}" poster="${imgRef.url}" class="tweet-media u-video"></video>`);
+							let videoPath = await this.copyVideo(localVideoPath);
+							medias.push(`<video muted controls ${media.type === "animated_gif" ? "loop" : ""} src="${videoPath}" class="tweet-media u-video"></video>`);
 						} catch(e) {
 							console.log("Video request error", e.message);
 							medias.push(`<a href="${remoteVideoUrl}">${remoteVideoUrl}</a>`);
