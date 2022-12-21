@@ -110,7 +110,7 @@ class Twitter {
 			return url
 		}
 		
-		if (!fs.existsSync(outputDir))) {
+		if (!fs.existsSync(outputDir)) {
 			fs.mkdirSync(outputDir);
 		}
 
